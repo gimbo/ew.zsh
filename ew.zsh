@@ -1,6 +1,8 @@
 # Emacs for the win!
 
-EMACSTMP=$TMPDIR/emacs502
+# Assumes 'server-use-tcp' is nil, so we use a socket.
+
+EMACSTMP=$TMPDIR/emacs$(id -u)
 
 # Start an emacs server.  Takes one optional argument, the server
 # name, defaulting to "server".
@@ -55,6 +57,7 @@ esk() {
 e() {
   emacsclient --alternate-editor="" -t "$@"
 }
+
 ew() {
   if (( $# == 0 )); then
     # No filename, just open and focus.
@@ -64,7 +67,7 @@ ew() {
   fi
 }
 
-# We prefer to edit ~/.emacs in its own server space, which
-# automatically gets a different colour.
+# I prefer to edit ~/.emacs in its own server space, which
+# automatically gets a different colour thanks to my ~/.emacs
 #
 alias ewdot="ew -s .emacs ~/.emacs"
