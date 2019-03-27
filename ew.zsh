@@ -70,4 +70,4 @@ ew() {
 # I prefer to edit ~/.emacs in its own server space, which
 # automatically gets a different colour thanks to my ~/.emacs
 #
-alias ewdot="ew -s .emacs ~/.emacs.el"
+alias ewdot="ew -s .emacs ~/.emacs-dir/amg-init.el"
