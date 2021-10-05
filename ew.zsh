@@ -26,7 +26,7 @@ ess() {
 # List the currently running emacs servers, and any emacs processes.
 #
 esl() {
-  ls -a -1 $EMACSTMP | tail +3 | sort
+  ls -a -1 $EMACSTMP | sort
   echo
   pgrep -il emacs
 }
