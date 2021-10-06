@@ -1,6 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-"""Look for named emacs servers/daemons and launch them if needed.
+"""Helper script for managing emacs server processes."""
+
+EXTRA_DOCS = """
 
 This is intended to be run as a MacOS launch agent, e.g. with a config as follows:
 
@@ -14,25 +16,20 @@ This is intended to be run as a MacOS launch agent, e.g. with a config as follow
     <array>
       <string>/opt/homebrew/bin/python3</string>
       <string>/Users/andy.gimblett/prog/gimbo/zsh-plugins/ew.zsh/emacs_servers.py</string>
+      <string>ensure</string>
       <string>server</string>
       <string>git</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>StartInterval</key>
-    <integer>10</integer>
+    <integer>5</integer>
     <key>Nice</key>
     <integer>10</integer>
     <key>ProcessType</key>
     <string>Background</string>
     <key>WorkingDirectory</key>
     <string>/Users/andy.gimblett</string>
-    <!--
-    <key>StandardOutPath</key>
-    <string>/Users/andy.gimblett/com.barefootcode.emacs-servers.stdout.log</string>
-    <key>StandardErrorPath</key>
-    <string>/Users/andy.gimblett/com.barefootcode.emacs-servers.stderr.log</string>
-    -->
     <key>StandardOutPath</key>
     <string>/dev/null</string>
     <key>StandardErrorPath</key>
@@ -40,65 +37,119 @@ This is intended to be run as a MacOS launch agent, e.g. with a config as follow
   </dict>
 </plist>
 
-(If you want to log output, then comment out/uncomment the appropriate
-`StandardOutPath`/`StandardErrorPath` entries as desired — and don't forget to
-also set `DEBUG` to `True` in the script itself if you want to see actual
-output.)
+If you want to turn on debug output add
+
+      <string>--debug</string>
+
+before the "ensure" line above, and set StandardOutPath and StandardErrorPath as appropriate.
 """
 
+import argparse
 import os
 import re
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, List, Set, Tuple
 
 
-DEBUG = False
-EMACS_TMP_FOLDER_NAME = "emacs{0}".format(os.getuid())
 EMACS_BINARY_PATH = "/Applications/Emacs.app/Contents/MacOS/Emacs"
 
 
 def main():
+    args = parse_args(sys.argv[1:])
     debug()
     debug("emacs_servers.py starting")
-    requested_servers = tuple(
-        sorted(sys.argv[1:], key=lambda x: x if x != "server" else "0")
+    debug("args:", args)
+    if args.command == "list":
+        list_running_servers()
+    elif args.command == "clean":
+        clean_dangling_server_sockets()
+    elif args.command == "ensure":
+        if not args.stopped:
+            ensure_servers_running(args.servers)
+        else:
+            ensure_servers_stopped(args.servers)
+    debug("emacs_server.py finished")
+
+
+# Commands
+
+
+def list_running_servers() -> Set[str]:
+    debug("Listing running servers")
+    emacs_server_processes: Dict[int, str] = enumerate_apparent_emacs_server_processes()
+    debug("Apparently running emacs server processes:", emacs_server_processes)
+    emacs_server_sockets: Set[str] = enumerate_apparent_server_sockets()
+    debug("Apparent emacs server sockets:", emacs_server_sockets)
+    max_server_name_length: int = max(
+        [0] + [len(server_name) for server_name in emacs_server_processes.values()]
     )
-    requested_servers = set(sys.argv[1:])
-    if not requested_servers:
-        debug("No emacs servers requested; nothing to do")
-        return
-    debug("Requested emacs servers:", ", ".join(requested_servers))
+    template = "Server: {{0:<{0}}}  |  PID: {{1:>6}}  |  Has socket: {{2:<5}}".format(
+        max_server_name_length
+    )
+    if not emacs_server_processes:
+        print("No emacs server processes seem to be running.")
+    for pid, server_name in emacs_server_processes.items():
+        has_socket = server_name in emacs_server_sockets
+        print(template.format(server_name, pid, str(has_socket)))
+    for socket_name in set(emacs_server_sockets) - set(emacs_server_processes.values()):
+        print("Dangling socket (no associated process): {0}".format(socket_name))
+    return set(emacs_server_processes.values()) & set(emacs_server_sockets)
+
+
+def clean_dangling_server_sockets():
+    debug("Cleaning up dangling server sockets")
+    emacs_server_processes = enumerate_apparent_emacs_server_processes()
+    debug("Apparently running emacs server processes:", emacs_server_processes)
+    emacs_server_sockets = enumerate_apparent_server_sockets()
+    debug("Apparent emacs server sockets:", emacs_server_sockets)
+    dangling_socket_names = emacs_server_sockets - set(emacs_server_processes.values())
+    if not dangling_socket_names:
+        debug("No dangling sockets to clean up")
+    for socket_name in dangling_socket_names:
+        print("Cleaning dangling emacs server socket: {0}".format(socket_name))
+        os.unlink(emacs_server_sockets_path() / socket_name)
+
+
+def ensure_servers_running(requested_servers: List[str]):
+    debug("Ensuring servers running: ", requested_servers)
     running_servers = list_running_servers()
     debug("Running emacs servers:", ", ".join(running_servers))
-    missing_servers = requested_servers - running_servers
+    missing_servers = set(requested_servers) - running_servers
     if not missing_servers:
         debug("All requested emacs servers running; nothing to do")
         return
     debug("Missing emacs servers:", ", ".join(missing_servers))
     for server in missing_servers:
         attempt_to_start_server(server)
-    debug("emacs_server.py finished")
 
 
-def list_running_servers():
-    emacs_servers = set(get_apparent_emacs_server_processes().values())
-    debug("Apparently running emacs servers:", emacs_servers)
-    try:
-        server_sockets = set(path.name for path in emacs_servers_path().iterdir())
-    except FileNotFoundError:
-        server_sockets = {}
-    debug("Server_sockets:", server_sockets)
-    for server_socket in server_sockets:
-        if server_socket not in emacs_servers:
-            debug("Removing dangling server socket:", server_socket)
-            os.unlink(emacs_servers_path() / server_socket)
-    return emacs_servers
+def ensure_servers_stopped(servers: List[str]):
+    debug("Ensuring servers stopped: ", servers)
+    raise NotImplementedError()
 
 
-def get_apparent_emacs_server_processes():
-    debug("Listing apparent emacs server processes")
+# Machinery called by commands
+
+
+def enumerate_apparent_emacs_server_processes() -> Dict[int, str]:
+    def check_if_process_is_emacs_server(pid: int):
+        debug("Checking process with pid:", pid)
+        output = "\n".join(run_command(["lsof", "+p", str(pid)], debug_output=False))
+        regex = "{0}".format(emacs_server_sockets_path()) + r"/(\S+)$"
+        match = re.search(regex, output, re.MULTILINE)
+        if match:
+            server_name = match.group(1)
+            debug(
+                "Process with pid {0} seems to be running emacs server: {1}".format(
+                    pid, server_name
+                )
+            )
+            return server_name
+
+    debug("Enumerating apparent emacs server processes")
     emacs_pids = list(
         sorted(
             int(line.split()[0])
@@ -122,30 +173,36 @@ def get_apparent_emacs_server_processes():
     }
 
 
-def check_if_process_is_emacs_server(pid: int):
-    debug("Checking process with pid:", pid)
-    servers_path = str(emacs_servers_path())
-    output = "\n".join(run_command(["lsof", "+p", str(pid)], debug_output=False))
-    regex = "{0}".format(emacs_servers_path()) + r"/(\S+)$"
-    match = re.search(regex, output, re.MULTILINE)
-    if match:
-        server_name = match.group(1)
-        debug(
-            "Process with pid {0} seems to be running emacs server: {1}".format(
-                pid, server_name
-            )
+def enumerate_apparent_server_sockets() -> Set[str]:
+    debug("Enumerating apparent emacs server sockets")
+    try:
+        return set(
+            path.name
+            for path in emacs_server_sockets_path().iterdir()
+            if path.is_socket()
         )
-        return server_name
+    except FileNotFoundError:
+        return {}
 
 
-def emacs_servers_path():
-    return Path(os.environ["TMPDIR"]) / EMACS_TMP_FOLDER_NAME
+def emacs_server_sockets_path():
+    """Compute path to user-specific emacs server socket folder."""
+    return Path(os.environ["TMPDIR"]) / "emacs{0}".format(os.getuid())
 
 
 def attempt_to_start_server(server: str):
     debug("Attempting to start server:", server)
     run_command([EMACS_BINARY_PATH, "--daemon={0}".format(server)], filter_fn=bool)
     debug("Started emacs server successfully: {0}".format(server))
+
+
+# I/O handling, running commands, and argument parsing
+
+
+def debug(*args):
+    if not DEBUG:
+        return
+    print(datetime.utcnow().isoformat(timespec="seconds"), *args, flush=True)
 
 
 def run_command(args, filter_fn=None, debug_output=True):
@@ -163,10 +220,43 @@ def run_command(args, filter_fn=None, debug_output=True):
     return output
 
 
-def debug(*args):
-    if not DEBUG:
-        return
-    print(datetime.utcnow().isoformat(timespec="seconds"), *args, flush=True)
+def parse_args(argsraw: List[str]):
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    parser.add_argument("-d", "--debug", action="store_true", help="Write debug output")
+
+    commands = parser.add_subparsers(title="commands", dest="command", required=True)
+    commands.add_parser("list", description="List running servers")
+    commands.add_parser(
+        "clean",
+        description="Clean up dangling server sockets (i.e. those without an associated running process)",
+    )
+    cmd_ensure = commands.add_parser(
+        "ensure", description="Ensure named servers are running or stopped"
+    )
+    cmd_ensure.add_argument(
+        "-S",
+        "--stopped",
+        action="store_true",
+        help="Ensure named servers are stopped (default is to ensure running",
+    )
+    cmd_ensure.add_argument(
+        "servers",
+        help="Names of servers to ensure are running",
+        metavar="SERVER_NAME",
+        nargs="+",
+    )
+
+    args = parser.parse_args(argsraw)
+
+    global DEBUG
+    DEBUG = args.debug
+    del args.debug
+
+    return args
 
 
 if __name__ == "__main__":
