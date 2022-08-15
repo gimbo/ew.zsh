@@ -54,7 +54,7 @@ esk() {
 
 # Emacs clients for the command line and GUI.
 #
-e() {
+ec() {
   emacsclient --alternate-editor="" -t "$@"
 }
 
