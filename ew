@@ -1,0 +1,7 @@
+# Emacs client for the GUI.
+if (( $# == 0 )); then
+    # No filename, just open and focus.
+    emacsclient --alternate-editor="" -c -n --eval '(x-focus-frame nil)' &
+else
+    emacsclient --alternate-editor="" -c -n "$@" &
+fi

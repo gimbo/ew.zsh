@@ -1,0 +1,16 @@
+# Start an emacs server.  Takes one optional argument, the server
+# name, defaulting to "server".
+
+if (( $# == 0)); then
+    local server="server"
+else
+    local server="$1"
+fi
+local socket="$EMACSTMP/$server"
+echo "Looking for emacs socket at $socket"
+if [ -e "$socket" ]; then
+    echo "Server $server already running"
+else
+    echo "Starting server $server"
+    emacs --daemon=$server
+fi

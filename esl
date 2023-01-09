@@ -1,0 +1,5 @@
+# List the currently running emacs servers, and any emacs processes.
+#
+ls -a -1 $EMACSTMP | sort
+echo
+pgrep -il emacs

@@ -1,0 +1,18 @@
+# Kill an emacs server.  Takes one optional argument, the server name,
+# defaulting to "server".
+#
+if (( $# == 0)); then
+    local server="server"
+else
+    local server="$1"
+fi
+local socket="$EMACSTMP/$server"
+echo "Looking for emacs socket at $socket"
+if [ -e "$socket" ]; then
+    echo "Sending (kill-emacs) to $server"
+    emacsclient -s $server -e '(kill-emacs)'
+else
+    echo "Socket not found for server $server, nothing to do"
+fi
+sleep 1
+esl
