@@ -1,5 +1,9 @@
 # List the currently running emacs servers, and any emacs processes.
 #
-ls -a -1 $EMACSTMP | sort
+if [[ -e "$EMACSTMP" ]]; then
+    ls -a -1 $EMACSTMP | sort
+else
+    echo "No emacs servers running."
+fi
 echo
 pgrep -il emacs

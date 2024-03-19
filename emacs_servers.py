@@ -54,7 +54,7 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
 
-EMACS_BINARY_PATH = "/Applications/Emacs.app/Contents/MacOS/Emacs"
+EMACS_BINARY_PATH = Path("~/Applications/casks/Emacs.app/Contents/MacOS/Emacs").expanduser()
 
 
 def main():
@@ -192,7 +192,7 @@ def emacs_server_sockets_path():
 
 def attempt_to_start_server(server: str):
     debug("Attempting to start server:", server)
-    run_command([EMACS_BINARY_PATH, "--daemon={0}".format(server)], filter_fn=bool)
+    run_command([str(EMACS_BINARY_PATH), "--daemon={0}".format(server)], filter_fn=bool)
     debug("Started emacs server successfully: {0}".format(server))
 
 
